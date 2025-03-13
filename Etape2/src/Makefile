@@ -1,32 +1,28 @@
 include Make_linux.inc
-include Make_msys2.inc
-include Make_osx.inc
+#include Make_msys2.inc
+#include Make_osx.inc
 
-CXX = mpic++ 
 CXXFLAGS = -std=c++17 -Wall
-
 ifdef DEBUG
-CXXFLAGS += -g -O0 -fbounds-check -pedantic -D_GLIBCXX_DEBUG
-CXXFLAGS2 = $(CXXFLAGS)
+CXXFLAGS += -g -O0 -fbounds-check -pedantic -D_GLIBCXX_DEBUG -fsanitize=address
 else
-CXXFLAGS2 = $(CXXFLAGS) -O2 -march=native
 CXXFLAGS += -O3 -march=native
 endif
 
-ALL = simulation.exe
+ALL= simulation.exe 
 
-default: help
+default:	help
 
 all: $(ALL)
 
 clean:
-	@rm -fr *.o *.exe *~
+	@rm -fr *.o *.exe *~ *.d
 
 .cpp.o:
-	$(CXX) $(CXXFLAGS2) -c $< -o $@
+	$(CXX) $(CXXFLAGS) -MMD -c $< -o $@
 
-simulation.exe: display.o display.hpp model.o model.hpp simulation.o
-	$(CXX) $(CXXFLAGS2) $^ -o $@ $(LIB) -lSDL2  # 确保 SDL2 也被链接
+simulation.exe : display.o model.o simulation.o
+	$(CXX) $(CXXFLAGS) $^ -o $@ $(LIB)	
 
 help:
 	@echo "Available targets : "
@@ -38,3 +34,5 @@ help:
 
 %.html: %.md
 	pandoc -s --toc $< --css=./github-pandoc.css --metadata pagetitle="OS202 - TD1" -o $@
+
+-include *.d

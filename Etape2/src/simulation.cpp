@@ -7,7 +7,7 @@
 #include <omp.h>
 #include "model.hpp"
 #include "display.hpp"
-#include <mpi.h>
+
 using namespace std::string_literals;
 using namespace std::chrono_literals;
 const int scale_factor = 10;
@@ -192,43 +192,46 @@ void display_params(ParamsType const& params)
               << "\tPosition initiale du foyer (col, ligne) : " << params.start.column << ", " << params.start.row << std::endl;
 }
 
-int main(int nargs, char* args[])
-{
-    MPI_Init(&nargs, &args); // 初始化 MPI
-    int rank;
-    MPI_Comm_rank(MPI_COMM_WORLD, &rank); // 获取进程编号
-
-    auto params = parse_arguments(nargs - 1, &args[1]);
-    if (rank == 0) display_params(params);
-
-    if (!check_params(params))
+int main( int nargs, char* args[] )
+{ 
+    //修改进程数
+    omp_set_num_threads(3);
+    printf("Using %d threads\n", omp_get_max_threads());
+    #pragma omp parallel
     {
-        MPI_Finalize();
-        return EXIT_FAILURE;
+        printf("Thread %d is running\n", omp_get_thread_num());
     }
 
-    auto simu = Model(params.length, params.discretization, params.wind,
-                      params.start);
+    auto params = parse_arguments(nargs-1, &args[1]);
+    display_params(params);
+    if (!check_params(params)) return EXIT_FAILURE;
 
+    auto displayer = Displayer::init_instance( params.discretization, params.discretization, scale_factor );
+    auto simu = Model( params.length, params.discretization, params.wind,
+                       params.start);
     SDL_Event event;
-    Displayer* displayer = nullptr;
-    if (rank == 0)
-    {
-        displayer = Displayer::init_instance(params.discretization, params.discretization).get();
-    }
 
+    //Q1
+    auto total_start = std::chrono::high_resolution_clock::now(); //
+    std::chrono::duration<double> avg_step_time{0.0};
+    std::chrono::duration<double> avg_render_time{0.0};    
+    int count = 0;
     while (simu.update())
     {
-        if (rank == 0)
-        {
-            std::cout << "Time step " << simu.time_step() << "\n===============" << std::endl;
-            displayer->update(simu.vegetal_map(), simu.fire_map());
-            if (SDL_PollEvent(&event) && event.type == SDL_QUIT)
-                break;
-            std::this_thread::sleep_for(std::chrono::milliseconds(100));
-        }
-    }
+        count++;
+        if ((simu.time_step() & 31) == 0) 
+            // std::cout << "Time step " << simu.time_step() << "\n===============" << std::endl;
+            displayer->update( simu.vegetal_map(), simu.fire_map() );
+        if (SDL_PollEvent(&event) && event.type == SDL_QUIT)
+            break;
+        std::this_thread::sleep_for(0.1s);
 
-    MPI_Finalize(); // 结束 MPI
+        //std::cout << "Step time: " << step_time.count() << "s, Render time: " << render_time.count() << "s" << std::endl;
+    }
+    auto total_end = std::chrono::high_resolution_clock::now(); //
+    std::chrono::duration<double> total_time = total_end - total_start; //
+
+    std::cout << "Total simulation time: " << total_time.count() << " seconds" << std::endl; //
+    
     return EXIT_SUCCESS;
 }
