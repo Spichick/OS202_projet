@@ -77,17 +77,17 @@ Model::Model( double t_length, unsigned t_discretization, std::array<double,2> t
 // --------------------------------------------------------------------------------------------------------------------
 bool Model::update() {
     auto start_time = std::chrono::high_resolution_clock::now();
-
+    int get_num = omp_get_max_threads();
     // 线程本地存储的临时容器，用于收集每个线程的更新
-    std::vector<std::unordered_map<std::size_t, std::uint8_t>> thread_local_next_fronts(omp_get_max_threads());
-    std::vector<std::vector<std::size_t>> thread_local_erased_keys(omp_get_max_threads());
+    std::vector<std::unordered_map<std::size_t, std::uint8_t>> currthread_nextfront(get_num); //TODO: 一个哈希表: 局部计算结果，但不共享数据。适用于快速查找
+    std::vector<std::vector<std::size_t>> currthread_erasedkey(get_num);
 
     // 并行处理每个火点
-    #pragma omp parallel for schedule(dynamic, 4)
+    #pragma omp parallel for schedule(dynamic)
     for (size_t i = 0; i < m_fire_front.size(); i++) {
-        int tid = omp_get_thread_num();  // 获取当前线程ID
-        auto& local_next_front = thread_local_next_fronts[tid];  // 当前线程的本地更新容器
-        auto& local_erased = thread_local_erased_keys[tid];      // 当前线程的待删除键容器
+        int curr_id = omp_get_thread_num();  // 获取当前线程ID
+        auto& local_next_front = currthread_nextfront[curr_id];  // 当前线程的本地更新容器
+        auto& local_erased = currthread_erasedkey[curr_id];      // 当前线程的待删除键容器
 
         auto it = std::next(m_fire_front.begin(), i);
         auto f = *it;
@@ -140,13 +140,18 @@ bool Model::update() {
         // 处理火势减弱
         if (f.second == 255) {
             double tirage = pseudo_random(f.first * 52513 + m_time_step, m_time_step);
-            if (tirage < p2) {
+            if (tirage < p2) 
+            {
                 m_fire_map[f.first] >>= 1;
                 local_next_front[f.first] = f.second >> 1;  // 火势减弱
-            } else {
+            } 
+            else 
+            {
                 local_next_front[f.first] = f.second;  // 火势保持不变
             }
-        } else {
+        } 
+        else 
+        {
             m_fire_map[f.first] >>= 1;
             local_next_front[f.first] = f.second >> 1;  // 火势继续减弱
         }
@@ -159,14 +164,14 @@ bool Model::update() {
 
     // 串行合并所有线程的更新
     auto next_front = m_fire_front;
-    for (auto& local_front : thread_local_next_fronts) {
+    for (auto& local_front : currthread_nextfront) {
         for (auto& [key, val] : local_front) {
             next_front[key] = val;
         }
     }
 
     // 处理删除操作
-    for (auto& local_erased : thread_local_erased_keys) {
+    for (auto& local_erased : currthread_erasedkey) {
         for (auto key : local_erased) {
             next_front.erase(key);
             m_fire_map[key] = 0;
