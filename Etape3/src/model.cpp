@@ -88,7 +88,7 @@ bool Model::update() {
     std::unordered_map<std::size_t, std::uint8_t> next_front;
     // 并行处理每个火点
     #pragma omp parallel for schedule(dynamic, 10) // 每次分配10个任务给某个线程
-    for (size_t i = 0; i < m_fire_front.size(); i++) {
+    for (size_t i = rank; i < m_fire_front.size(); i+=size) { //对于mpi
         int curr_id = omp_get_thread_num();  // 当前线程index
         auto& local_next_front = currthread_nextfront[curr_id];  // 储存本地新点燃的火点索引
         auto& local_erased = currthread_erasedkey[curr_id];      // 记录火势熄灭的单元索引
@@ -193,7 +193,7 @@ bool Model::update() {
         }
     }
     // 更新时间步
-
+    #pragma omp atomic
     m_time_step += 1;
 
     // 输出执行时间
@@ -202,7 +202,9 @@ bool Model::update() {
     std::cout << "Temps pour une étape : " << elapsed.count() << " secondes" << std::endl;
 
     double step_time = elapsed.count();
+    #pragma omp atomic
     m_total_time += step_time;
+    #pragma omp atomic
     m_step_count+=1;
     double average_time = m_total_time / m_step_count;
     std::cout<<"avg step time: "<<average_time<<std::endl;
