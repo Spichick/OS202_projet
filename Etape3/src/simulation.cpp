@@ -195,7 +195,7 @@ void display_params(ParamsType const& params)
 int main( int nargs, char* args[] )
 { 
     
-    omp_set_num_threads(3);
+    omp_set_num_threads(1);
     MPI_Init(&nargs, &args); // 初始化MPI
     int rank, size;
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
@@ -230,20 +230,18 @@ int main( int nargs, char* args[] )
     std::chrono::duration<double> avg_step_time{0.0};
     std::chrono::duration<double> avg_render_time{0.0};    
     int count = 0;
-    #pragma omp parallel
+
+    while (simu.update())
     {
-        while (simu.update())
-        {
-            count++;
-            if ((simu.time_step() & 31) == 0) 
-                std::cout << "Time step " << simu.time_step() << "\n===============" << std::endl;
-                displayer->update( simu.vegetal_map(), simu.fire_map() );
-            if (SDL_PollEvent(&event) && event.type == SDL_QUIT)
-                break;
-            std::this_thread::sleep_for(0.1s);
-    
-            //std::cout << "Step time: " << step_time.count() << "s, Render time: " << render_time.count() << "s" << std::endl;
-        }
+        count++;
+        if ((simu.time_step() & 31) == 0) 
+            std::cout << "Time step " << simu.time_step() << "\n===============" << std::endl;
+            displayer->update( simu.vegetal_map(), simu.fire_map() );
+        if (SDL_PollEvent(&event) && event.type == SDL_QUIT)
+            break;
+        std::this_thread::sleep_for(0.1s);
+
+        //std::cout << "Step time: " << step_time.count() << "s, Render time: " << render_time.count() << "s" << std::endl;
     }
 
     auto total_end = std::chrono::high_resolution_clock::now(); //

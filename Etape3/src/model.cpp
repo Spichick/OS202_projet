@@ -193,7 +193,6 @@ bool Model::update() {
         }
     }
     // 更新时间步
-    #pragma omp atomic
     m_time_step += 1;
 
     // 输出执行时间
