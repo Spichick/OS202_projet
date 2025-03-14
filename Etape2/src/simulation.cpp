@@ -198,7 +198,7 @@ int main( int nargs, char* args[] )
     int rank, size;
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
     MPI_Comm_size(MPI_COMM_WORLD, &size);
-
+    // 设置进程
     omp_set_num_threads(4);
     if (rank == 0) {
         printf("Using %d threads\n", omp_get_max_threads());
