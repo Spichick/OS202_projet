@@ -195,7 +195,7 @@ void display_params(ParamsType const& params)
 int main( int nargs, char* args[] )
 { 
     //修改进程数
-    omp_set_num_threads(3);
+    omp_set_num_threads(1);
     printf("Using %d threads\n", omp_get_max_threads());
     #pragma omp parallel
     {

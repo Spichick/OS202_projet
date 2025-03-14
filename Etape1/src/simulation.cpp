@@ -195,7 +195,7 @@ void display_params(ParamsType const& params)
 int main( int nargs, char* args[] )
 { 
     //修改进程数
-    omp_set_num_threads(3);
+    omp_set_num_threads(4);
     printf("Using %d threads\n", omp_get_max_threads());
     #pragma omp parallel
     {
@@ -220,7 +220,7 @@ int main( int nargs, char* args[] )
     {
         count++;
         if ((simu.time_step() & 31) == 0) 
-            // std::cout << "Time step " << simu.time_step() << "\n===============" << std::endl;
+            std::cout << "Time step " << simu.time_step() << "\n===============" << std::endl;
             displayer->update( simu.vegetal_map(), simu.fire_map() );
         if (SDL_PollEvent(&event) && event.type == SDL_QUIT)
             break;

@@ -40,7 +40,7 @@ Model::Model( double t_length, unsigned t_discretization, std::array<double,2> t
     m_distance = m_length/double(m_geometry);
     auto index = get_index_from_lexicographic_indices(t_start_fire_position);
     m_fire_map[index] = 255u;
-    m_fire_front[index] = 255u; // 在h文件里定义，是uint8_t类型，这里255u的u是unsigned，取值范围就是0到255。值表示火势大小。
+    m_fire_front[index] = 255u;
 
     constexpr double alpha0 = 4.52790762e-01;
     constexpr double alpha1 = 9.58264437e-04;
@@ -50,7 +50,7 @@ Model::Model( double t_length, unsigned t_discretization, std::array<double,2> t
         p1 = alpha0 + alpha1*m_wind_speed + alpha2*(m_wind_speed*m_wind_speed);
     else 
         p1 = alpha0 + alpha1*t_max_wind + alpha2*(t_max_wind*t_max_wind);
-    p2 = 0.3; // 火焰减小概率
+    p2 = 0.3;
 
     if (m_wind[0] > 0)
     {
@@ -83,17 +83,17 @@ bool Model::update() {
     std::vector<std::vector<std::size_t>> currthread_erasedkey(get_num);
 
     // 并行处理每个火点
-    #pragma omp parallel for schedule(dynamic, 10) // 每次分配10个任务给某个线程
+    #pragma omp parallel for schedule(dynamic)
     for (size_t i = 0; i < m_fire_front.size(); i++) {
-        int curr_id = omp_get_thread_num();  // 当前线程index
-        auto& local_next_front = currthread_nextfront[curr_id];  // 储存本地新点燃的火点索引
-        auto& local_erased = currthread_erasedkey[curr_id];      // 记录火势熄灭的单元索引
+        int curr_id = omp_get_thread_num();  // 获取当前线程ID
+        auto& local_next_front = currthread_nextfront[curr_id];  // 当前线程的本地更新容器
+        auto& local_erased = currthread_erasedkey[curr_id];      // 当前线程的待删除键容器
 
-        auto f = *(std::next(m_fire_front.begin(), i)); // 获取第i个元素的迭代器，是一个键值对如{43,255}
-        // 获取当前火点的坐标
+        auto it = std::next(m_fire_front.begin(), i);
+        auto f = *it;
+
+        // 获取当前火点的坐标和强度
         LexicoIndices coord = get_lexicographic_from_index(f.first);
-        
-        // 获取当前火点的强度
         double power = log_factor(f.second);
 
         // 检查并更新相邻单元格
@@ -142,14 +142,9 @@ bool Model::update() {
             double tirage = pseudo_random(f.first * 52513 + m_time_step, m_time_step);
             if (tirage < p2) 
             {
-                // 让本点火势减半
-                // 再让将要传播到的邻居点火势减半
-                m_fire_map[f.first] >>= 1; // >>=1 就是减半，相当于二进制右移一位
-                f.second = (f.second >> 1);
-                local_next_front[f.first] = f.second;  // 火势减弱
+                m_fire_map[f.first] >>= 1;
+                local_next_front[f.first] = f.second >> 1;  // 火势减弱
             } 
-            // NOTE: Gpt m'a aidé.
-            // Dans la version parallèle, comme local_next_front est utilisé, l'affectation dans else est indispensable, sinon certains foyers pourraient ne pas être enregistrés dans m_fire_front final, ce qui entraînerait une perte de foyers.
             else 
             {
                 local_next_front[f.first] = f.second;  // 火势保持不变
@@ -162,8 +157,7 @@ bool Model::update() {
         }
 
         // 如果火势减弱到0，记录待删除的键
-        if (local_next_front[f.first] == 0) 
-        {
+        if (local_next_front[f.first] == 0) {
             local_erased.push_back(f.first);
         }
     }
