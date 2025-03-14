@@ -7,7 +7,7 @@
 #include <omp.h>
 #include "model.hpp"
 #include "display.hpp"
-
+#include <mpi.h>
 using namespace std::string_literals;
 using namespace std::chrono_literals;
 const int scale_factor = 10;
@@ -194,17 +194,31 @@ void display_params(ParamsType const& params)
 
 int main( int nargs, char* args[] )
 { 
-    //修改进程数
-    omp_set_num_threads(1);
-    printf("Using %d threads\n", omp_get_max_threads());
+    MPI_Init(&nargs, &args); // 初始化MPI
+    int rank, size;
+    MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+    MPI_Comm_size(MPI_COMM_WORLD, &size);
+
+    omp_set_num_threads(4);
+    if (rank == 0) {
+        printf("Using %d threads\n", omp_get_max_threads());
+    }
+
     #pragma omp parallel
     {
-        printf("Thread %d is running\n", omp_get_thread_num());
+        if (rank == 0) {
+            printf("Thread %d is running\n", omp_get_thread_num());
+        }
     }
 
     auto params = parse_arguments(nargs-1, &args[1]);
-    display_params(params);
-    if (!check_params(params)) return EXIT_FAILURE;
+    if (rank == 0) {
+        display_params(params);
+    }
+    if (!check_params(params)) {
+        MPI_Finalize();
+        return EXIT_FAILURE;
+    }
 
     auto displayer = Displayer::init_instance( params.discretization, params.discretization, scale_factor );
     auto simu = Model( params.length, params.discretization, params.wind,
@@ -220,7 +234,7 @@ int main( int nargs, char* args[] )
     {
         count++;
         if ((simu.time_step() & 31) == 0) 
-            // std::cout << "Time step " << simu.time_step() << "\n===============" << std::endl;
+            std::cout << "Time step " << simu.time_step() << "\n===============" << std::endl;
             displayer->update( simu.vegetal_map(), simu.fire_map() );
         if (SDL_PollEvent(&event) && event.type == SDL_QUIT)
             break;
@@ -230,8 +244,9 @@ int main( int nargs, char* args[] )
     }
     auto total_end = std::chrono::high_resolution_clock::now(); //
     std::chrono::duration<double> total_time = total_end - total_start; //
-
-    std::cout << "Total simulation time: " << total_time.count() << " seconds" << std::endl; //
-    
+    if (rank==0){
+        std::cout << "Total simulation time: " << total_time.count() << " seconds" << std::endl; //
+    }
+    MPI_Finalize();
     return EXIT_SUCCESS;
 }
